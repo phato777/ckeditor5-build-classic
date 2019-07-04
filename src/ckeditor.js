@@ -27,8 +27,63 @@ import Paragraph from '@ckeditor/ckeditor5-paragraph/src/paragraph';
 import PasteFromOffice from '@ckeditor/ckeditor5-paste-from-office/src/pastefromoffice';
 import Table from '@ckeditor/ckeditor5-table/src/table';
 import TableToolbar from '@ckeditor/ckeditor5-table/src/tabletoolbar';
+import Mention from '@ckeditor/ckeditor5-mention/src/mention';
 
 export default class ClassicEditor extends ClassicEditorBase {}
+
+function MentionLinks( editor ) {
+	// The upcast converter will convert a view
+	//
+	//		<a href="..." class="mention" data-mention="...">...</a>
+	//
+	// element to the model "mention" text attribute.
+	editor.conversion.for( 'upcast' ).elementToAttribute( {
+		view: {
+			name: 'a',
+			key: 'data-mention',
+			classes: 'mention',
+			attributes: {
+				href: true
+			}
+		},
+		model: {
+			key: 'mention',
+			value: viewItem => editor.plugins.get( 'Mention' ).toMentionAttribute( viewItem )
+		},
+		converterPriority: 'high'
+	} );
+
+	// Downcast the model "mention" text attribute to a view
+	//
+	//		<a href="..." class="mention" data-mention="...">...</a>
+	//
+	// element.
+	editor.conversion.for( 'downcast' ).attributeToElement( {
+		model: 'mention',
+		view: ( modelAttributeValue, viewWriter ) => {
+			// Do not convert empty attributes (lack of value means no mention).
+			if ( !modelAttributeValue ) {
+				return;
+			}
+
+			let href;
+
+			// User mentions are downcasted as mailto: links. Tags become normal URLs.
+			if ( modelAttributeValue.id[ 0 ] === '@' ) {
+				href = `mailto:${ modelAttributeValue.id.slice( 1 ) }@example.com`;
+			} else {
+				href = `https://example.com/social/${ modelAttributeValue.id.slice( 1 ) }`;
+			}
+
+			return viewWriter.createAttributeElement( 'a', {
+				class: 'mention',
+				'data-mention': modelAttributeValue.id,
+				href
+			} );
+		},
+		converterPriority: 'high'
+	} );
+}
 
 // Plugins to include in the build.
 ClassicEditor.builtinPlugins = [
@@ -52,7 +107,9 @@ ClassicEditor.builtinPlugins = [
 	Paragraph,
 	PasteFromOffice,
 	Table,
-	TableToolbar
+	TableToolbar,
+	Mention,
+	MentionLinks
 ];
 
 // Editor configuration.
