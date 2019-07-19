@@ -28,62 +28,66 @@ import PasteFromOffice from '@ckeditor/ckeditor5-paste-from-office/src/pastefrom
 import Table from '@ckeditor/ckeditor5-table/src/table';
 import TableToolbar from '@ckeditor/ckeditor5-table/src/tabletoolbar';
 import Mention from '@ckeditor/ckeditor5-mention/src/mention';
+import Plugin from '@ckeditor/ckeditor5-core/src/plugin';
+
+class MentionLinks extends Plugin {
+	init() {
+		const editor = this.editor;
+
+		editor.conversion.for( 'upcast' ).elementToAttribute( {
+			view: {
+				name: 'a',
+				key: 'data-mention',
+				classes: 'mention',
+				attributes: {
+					href: true,
+					'data-user-id': true
+				}
+			},
+			model: {
+				key: 'mention',
+				value: viewItem => {
+					// The mention feature expects that the mention attribute value
+					// in the model is a plain object with a set of additional attributes.
+					// In order to create a proper object use the toMentionAttribute() helper method:
+					const mentionAttribute = editor.plugins.get( 'Mention' ).toMentionAttribute( viewItem, {
+						// Add any other properties that you need.
+						link: viewItem.getAttribute( 'href' ),
+						user_id: viewItem.getAttribute( 'data-user-id' )
+					} );
+
+					return mentionAttribute;
+				}
+			},
+			converterPriority: 'high'
+		} );
+
+		// Downcast the model "mention" text attribute to a view
+		//
+		//		<a href="..." class="mention" data-mention="...">...</a>
+		//
+		// element.
+		editor.conversion.for( 'downcast' ).attributeToElement( {
+			model: 'mention',
+			view: ( modelAttributeValue, viewWriter ) => {
+				// Do not convert empty attributes (lack of value means no mention).
+				if ( !modelAttributeValue ) {
+					return;
+				}
+
+				return viewWriter.createAttributeElement( 'a', {
+					class: 'mention',
+					'data-mention': modelAttributeValue.id,
+					'data-user-id': modelAttributeValue.user_id,
+					'href': '{mention:' + modelAttributeValue.user_id + '}'
+				} );
+			},
+			converterPriority: 'high'
+		} );
+	}
+}
 
 export default class ClassicEditor extends ClassicEditorBase {}
-
-function MentionLinks( editor ) {
-	// The upcast converter will convert a view
-	//
-	//		<a href="..." class="mention" data-mention="...">...</a>
-	//
-	// element to the model "mention" text attribute.
-	editor.conversion.for( 'upcast' ).elementToAttribute( {
-		view: {
-			name: 'a',
-			key: 'data-mention',
-			classes: 'mention',
-			attributes: {
-				href: true
-			}
-		},
-		model: {
-			key: 'mention',
-			value: viewItem => editor.plugins.get( 'Mention' ).toMentionAttribute( viewItem )
-		},
-		converterPriority: 'high'
-	} );
-
-	// Downcast the model "mention" text attribute to a view
-	//
-	//		<a href="..." class="mention" data-mention="...">...</a>
-	//
-	// element.
-	editor.conversion.for( 'downcast' ).attributeToElement( {
-		model: 'mention',
-		view: ( modelAttributeValue, viewWriter ) => {
-			// Do not convert empty attributes (lack of value means no mention).
-			if ( !modelAttributeValue ) {
-				return;
-			}
-
-			let href;
-
-			// User mentions are downcasted as mailto: links. Tags become normal URLs.
-			if ( modelAttributeValue.id[ 0 ] === '@' ) {
-				href = `mailto:${ modelAttributeValue.id.slice( 1 ) }@example.com`;
-			} else {
-				href = `https://example.com/social/${ modelAttributeValue.id.slice( 1 ) }`;
-			}
-
-			return viewWriter.createAttributeElement( 'a', {
-				class: 'mention',
-				'data-mention': modelAttributeValue.id,
-				href
-			} );
-		},
-		converterPriority: 'high'
-	} );
-}
 
 // Plugins to include in the build.
 ClassicEditor.builtinPlugins = [
@@ -109,7 +113,7 @@ ClassicEditor.builtinPlugins = [
 	Table,
 	TableToolbar,
 	Mention,
-	MentionLinks
+	MentionLinks,
 ];
 
 // Editor configuration.
